@@ -70,25 +70,20 @@ update_firmware () {
 }
 
 get_serial_number () {
-    # Read Seral number
     SERIAL=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/serial | jq '.serial'| tr -d \")
 }
 
 get_halo_ssid () {
-    # Get the SSID from the unconfigured halo
     nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
     SSID_TMP_FILE_PATH="/tmp/halo_${SERIAL}_ssid"
     ssid=$(echo $nics_status | jq '.nics.wifi[0].settings.configuration[0].ssid' | tr -d \")
     echo $ssid > $SSID_TMP_FILE_PATH
-
     echo "Halo SSID: $ssid"
 }
 
 set_halo_ssid () {
-    # Get the settings JSON and write back the original SSID
     SSID=$(cat "$SSID_TMP_FILE_PATH" | tr -d \r\n)
     nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
-    # settings=$(echo $nics_status | jq --arg ssid "$SSID" '.nics.wifi[0].settings.configuration[0].ssid = "$ssid"')
     settings=$(echo $nics_status | jq --arg ssid $SSID '.nics.wifi[0].settings.configuration[0].ssid = $ssid')
     newsettings=$(echo $settings | jq '.nics.wifi[0].settings')
 
@@ -117,7 +112,6 @@ import_halo_configuration () {
 }
 
 export_halo_config () {
-    # export config from a fully configured reference Halo device
     EXPORT_PATH="exported_halo_config.tar.gz"
     rm -f "$EXPORT_PATH"
     curl -s --cookie <(echo "$COOKIES") -X POST  -H "Content-Type: application/json" -d '{"password": "123456"}' \
@@ -148,21 +142,16 @@ set_apn () {
 }
 
 check_configuration () {
-    # Read Seral number
-    serial=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/serial | jq '.serial'| tr -d \")
-
-    # Read NICs status
     nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
-    # Extract the IP address
-    ip_addr=$(echo "$nics_status" | jq '.nics.ethernet[0].settings.static_data[1].TARGET_IP' | tr -d \")
+    ip_addrs=$(echo "$nics_status" | jq '.nics.ethernet[0].current_ip_addresses' | tr -d \")
     wifi_ssid=$(echo "$nics_status" | jq '.nics.wifi[0].ssid' | tr -d \")
 
     # Print the data
     echo "=============================="
     echo "Halo configuration information"
     echo "=============================="
-    echo "Serial:       $serial"
-    echo "IP eth0:      $ip_addr"
+    echo "Serial:       $SERIAL"
+    echo "eth1 IPs:     $ip_addrs"
     echo "WiFi SSID:    $wifi_ssid"
     echo "------------------------------"
     
@@ -178,9 +167,7 @@ check_configuration () {
         iccid=$(echo $data | awk '{print $4}')
         carrier=$(echo $data | awk '{print $5}')
 
-        
-        echo "Modem $slot"
-        
+        # Check carrier and set APN if necessary
         if ! [ "$carrier" ]; then
             carrier="null"
         else
@@ -195,12 +182,14 @@ check_configuration () {
             fi
         fi
 
+        echo "Modem $slot"
         echo "  ICCID       $iccid"
         echo "  Carrier     $carrier"
         echo "  IMEI        $imei"
         echo "------------------------------"
         done <<<$(echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier')
     
+    # We expect 2 Verizon and 2 T-Mobile sims
     if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
         echo "SIM combination: PASS"
     else
