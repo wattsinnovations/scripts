@@ -1,10 +1,10 @@
 #!/bin/bash
 
 TARGET_IP="20.0.0.2"
-COOKIES="cookies.txt"
+COOKIES=""
 FIRMWARE_FILE_PATH=""
-EXPECTED_FW=$(echo '{
-        "web":"1.16.0.1-10.5",
+EXPECTED_VERSION=$(echo '{
+        "web":"1.15.0.1-10.4",
         "core":"2.12.1.0-10.4.1",
         "official":"10.4.1.0",
         "base":"0.12.0-10.3-aarch64"
@@ -13,73 +13,53 @@ EXPECTED_FW=$(echo '{
 
 wait_for_halo () {
     until login ; do
-        echo ""
-        echo "waiting for Halo ($TARGET_IP) to login..."
+        echo "Waiting for Halo ($TARGET_IP) to login..."
         sleep 3
     done    
-    echo ""
-    
+
     until cellular_modems_are_ready ; do
-        echo ""
-        echo "waiting for cellular modems to load and at least one SIM card to dial..."
+        echo "Waiting for cellular modems to load and at least one SIM card to dial..."
         sleep 3
     done
-    echo ""
-}
-
-ping_success () {
-    # Try pinging Halo ETH-1
-    pingres=$(ping $TARGET_IP -i 0.2 -c 5 -w 1)
-    loss=$(echo "$pingres" | grep "packet loss" | awk '{print $6}')
-    loss=${loss%?}
-
-    if [ "$loss" == "0" ]; then
-        echo "Discovered $TARGET_IP"
-    fi
-
-    return $result
 }
 
 login () {
-    curl -s -c "$COOKIES" --connect-timeout 3 -X POST -H "Content-Type: application/json" -d '{"username": "admin", "password": "admin"}' http://$TARGET_IP/api/v1/login > /dev/null
+    COOKIES=$(curl -s -c - --connect-timeout 3 -X POST -H "Content-Type: application/json" \
+        -d '{"username": "admin", "password": "admin"}' \
+        http://$TARGET_IP/api/v1/login)
     return $?
 }
 
 cellular_modems_are_ready () {
     login
-    all_cellular_ips=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/nics/status | jq -r '.nics.cellular_modem[] | .ip_address')
+    all_cellular_ips=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status | jq -r '.nics.cellular_modem[] | .ip_address')
     num_of_modems="$(echo "$all_cellular_ips" | wc -l)"
     
     if [ "$num_of_modems" = "4" ]; then
         echo "$all_cellular_ips" | grep -E [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ > /dev/null
         if [ "$?" = "0" ]; then
-            echo "all modems are detected, and there's at least one valid IP address. waiting for full init..."
+            echo "All modems are detected, and there's at least one valid IP address. waiting for full init..."
             sleep 5
             login
             return 0
         else
-            echo "all modems are detected, waiting for a SIM card to successfully dial..."
+            echo "All modems are detected, waiting for a SIM card to successfully dial..."
             return 1
         fi
     else
-        echo "waiting for all modems to load, only $num_of_modems were detected so far"
+        echo "Waiting for all modems to load, only $num_of_modems were detected so far"
         return 1
     fi
 }
 
-reboot () {
-    # This fully reboots it, which takes too long
-    curl -v -b cookies.txt -X POST http://$TARGET_IP/api/v1/reboot
-}
-
 get_installed_version () {
-    curl -s -b "$COOKIES" -X GET http://$TARGET_IP/api/v1/versions | jq --sort-keys -r '.versions.installed' | tr -d " \"\r\n"
+    curl -s --cookie <(echo "$COOKIES")  -X GET http://$TARGET_IP/api/v1/versions | jq --sort-keys -r '.versions.installed' | tr -d " \"\r\n"
 }
 
 update_firmware () {
     echo "Updating to $FIRMWARE_FILE_PATH"
 
-    success=$(curl -s -b "$COOKIES" -X POST -F "file=@\"$FIRMWARE_FILE_PATH\";filename=\"halo_firmware.tar\"" http://$TARGET_IP/api/v1/update)
+    success=$(curl -s --cookie <(echo "$COOKIES")  -X POST -F "file=@\"$FIRMWARE_FILE_PATH\";filename=\"halo_firmware.tar\"" http://$TARGET_IP/api/v1/update)
 
     if ! [ "$success" == "null" ]; then
         echo "Failed to upgrade firmware"
@@ -90,29 +70,28 @@ update_firmware () {
 }
 
 get_serial_number () {
-    # Read Seral number
-    SERIAL=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/serial | jq '.serial'| tr -d \")
+    SERIAL=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/serial | jq '.serial'| tr -d \")
 }
 
 get_halo_ssid () {
-    # Get the SSID from the unconfigured halo
-    nics_status=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/nics/status)
+    nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
     SSID_TMP_FILE_PATH="/tmp/halo_${SERIAL}_ssid"
-    echo $nics_status | jq '.nics.wifi[0].settings.configuration[0].ssid' > $SSID_TMP_FILE_PATH
+    ssid=$(echo $nics_status | jq '.nics.wifi[0].settings.configuration[0].ssid' | tr -d \")
+    echo $ssid > $SSID_TMP_FILE_PATH
+    echo "Halo SSID: $ssid"
 }
 
 set_halo_ssid () {
-    # Get the settings JSON and write back the original SSID
     SSID=$(cat "$SSID_TMP_FILE_PATH" | tr -d \r\n)
-    nics_status=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/nics/status)
-    settings=$(echo $nics_status | jq --arg ssid "$SSID" '.nics.wifi[0].settings.configuration[0].ssid = "$ssid"')
+    nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
+    settings=$(echo $nics_status | jq --arg ssid $SSID '.nics.wifi[0].settings.configuration[0].ssid = $ssid')
     newsettings=$(echo $settings | jq '.nics.wifi[0].settings')
 
-    success=$(curl -s -b cookies.txt -X PUT -H "Content-Type: application/json" \
+    success=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" \
         -d "{\"settings\": $newsettings}" \
         http://$TARGET_IP/api/v1/nics/wifi/wlan0/settings)
 
-    if ! [ "$success" == "null" ]; then
+    if ! [ "$success" = "null" ]; then
         echo "Failed to update SSID"
         exit 1
     else
@@ -121,10 +100,10 @@ set_halo_ssid () {
 }
 
 import_halo_configuration () {
-    success=$(curl -s -b cookies.txt -F "body={\"password\": \"123456\"};type=application/json" -F "tar_file=@$SETTINGS_TO_IMPORT;type=application/gzip" \
+    success=$(curl -s --cookie <(echo "$COOKIES") -F "body={\"password\": \"123456\"};type=application/json" -F "tar_file=@$SETTINGS_TO_IMPORT;type=application/gzip" \
         http://$TARGET_IP/api/v1/maintenance/import_configuration)
 
-    if ! [ "$success" == "null" ]; then
+    if ! [ "$success" = "null" ]; then
         echo "Failed to import configuration"
         exit 1
     else
@@ -133,20 +112,20 @@ import_halo_configuration () {
 }
 
 export_halo_config () {
-    # export config from a fully configured reference Halo device
     EXPORT_PATH="exported_halo_config.tar.gz"
     rm -f "$EXPORT_PATH"
-    curl -s -b cookies.txt -X POST  -H "Content-Type: application/json" -d '{"password": "123456"}' \
+    curl -s --cookie <(echo "$COOKIES") -X POST  -H "Content-Type: application/json" -d '{"password": "123456"}' \
         http://$TARGET_IP/api/v1/maintenance/export_configuration -o "$EXPORT_PATH"
     if [ -f "$EXPORT_PATH" ]; then
-        echo "config exported successfully."
+        echo "Config export success: $EXPORT_PATH"
     else
-        echo "config export failed!"
+        echo "Config export failed!"
     fi
 }
 
 reboot_halo () {
-    curl -s -b cookies.txt -X POST http://$TARGET_IP/api/v1/reboot
+    echo "Rebooting Halo..."
+    curl -s --cookie <(echo "$COOKIES") -X POST http://$TARGET_IP/api/v1/reboot > /dev/null
 }
 
 set_apn () {
@@ -154,31 +133,25 @@ set_apn () {
     apn="$2"
     echo -n "  -> Setting $nic_id with $apn... "
     
-    result=$(curl -s -b cookies.txt -X PUT -H "Content-Type: application/json" -d '{"dialing_rules": {"dial_type": 1, "username": "", "password": "", "auth_mode": 0, "apn": "$apn", "dial_number": "*99#", "pdp_type": null}}' "http://$TARGET_IP/api/v1/nics/cellular-modem/$nic_id/dialingrules")
+    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d '{"dialing_rules": {"dial_type": 1, "username": "", "password": "", "auth_mode": 0, "apn": "$apn", "dial_number": "*99#", "pdp_type": null}}' "http://$TARGET_IP/api/v1/nics/cellular-modem/$nic_id/dialingrules")
     if [ "$result" = "null" ]; then
-        echo "done."
+        echo "Done."
     else
-        echo "failed!!!"
+        echo "Failed!!!"
     fi
-    
 }
 
 check_configuration () {
-    # Read Seral number
-    serial=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/serial | jq '.serial'| tr -d \")
-
-    # Read NICs status
-    nics_status=$(curl -s -b cookies.txt http://$TARGET_IP/api/v1/nics/status)
-    # Extract the IP address
-    ip_addr=$(echo "$nics_status" | jq '.nics.ethernet[0].settings.static_data[1].TARGET_IP' | tr -d \")
+    nics_status=$(curl -s --cookie <(echo "$COOKIES") http://$TARGET_IP/api/v1/nics/status)
+    ip_addrs=$(echo "$nics_status" | jq '.nics.ethernet[0].current_ip_addresses' | tr -d \")
     wifi_ssid=$(echo "$nics_status" | jq '.nics.wifi[0].ssid' | tr -d \")
 
     # Print the data
     echo "=============================="
     echo "Halo configuration information"
     echo "=============================="
-    echo "Serial:       $serial"
-    echo "IP eth0:      $ip_addr"
+    echo "Serial:       $SERIAL"
+    echo "eth1 IPs:     $ip_addrs"
     echo "WiFi SSID:    $wifi_ssid"
     echo "------------------------------"
     
@@ -186,38 +159,38 @@ check_configuration () {
     num_att=0
     num_tmo=0
     
-    echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier' | while read -r data; do
+    while read -r data; do
+
         nic_id=$(echo $data | awk '{print $1}')
         slot=$(echo $data | awk '{print $2}')
         imei=$(echo $data | awk '{print $3}')
         iccid=$(echo $data | awk '{print $4}')
         carrier=$(echo $data | awk '{print $5}')
 
-        
-        echo "Modem $slot"
-        
+        # Check carrier and set APN if necessary
         if ! [ "$carrier" ]; then
             carrier="null"
         else
-            if [ "${carrier,,}" = "pelephone" ]; then
+            if [ "$carrier" = "Verizon" ]; then
                 set_apn "$nic_id" "TELIT.VZWENTP"
-                num_verizon=$((num_verizon + 1))
-            elif [ "${carrier,,}" = "at&t" ]; then
+                num_verizon=$((num_verizon+1))
+            elif [ "$carrier" = "at&t" ]; then
                 set_apn "$nic_id" "30304.mcs"
-                num_att=$((num_att + 1))
-            elif [ "${carrier,,}" = "t-mobile" ]; then
-                num_tmo=$((num_tmo + 1))
+                num_att=$((num_att+1))
+            elif [ "$carrier" = "T-Mobile" ]; then
+                num_tmo=$((num_tmo+1))
             fi
         fi
 
+        echo "Modem $slot"
         echo "  ICCID       $iccid"
         echo "  Carrier     $carrier"
         echo "  IMEI        $imei"
-        
         echo "------------------------------"
-        done
+        done <<<$(echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier')
     
-    if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "1" ] && [ "$num_att" = "1" ]; then
+    # We expect 2 Verizon and 2 T-Mobile sims
+    if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
         echo "SIM combination: PASS"
     else
         echo "SIM combination: FAILED"
@@ -227,7 +200,7 @@ check_configuration () {
 
 #__________________ Main _________________ #
 if ! [ $2 ]; then
-    echo "Usage: prepare_halo.sh <path to firmware upgrade file> <path to configuration file to import>"
+    echo "Usage: prepare_halo.sh <firmware-file> <config-file>"
     exit 1
 fi
 
@@ -238,21 +211,25 @@ wait_for_halo
 
 get_serial_number
 
-echo "preparing Halo: $SERIAL";
+echo "Preparing Halo: $SERIAL"
 
 installed_version=$(get_installed_version)
 
-echo "Installed Version: $installed_version"
-if [ "$installed_version" = "$EXPECTED_FW" ]; then
-    echo "Halo version is updated, skipping upgrade."
+if [ "$installed_version" = "$EXPECTED_VERSION" ]; then
+    echo "Halo version is up to date, skipping upgrade."
 else
-    echo "Halo version is different than expected: $EXPECTED_FW. upgrading..."
+    echo "Halo version is not up to date, upgrading..."
+    echo "Installed version:"
+    echo $installed_version
+    echo "Expected version:"
+    echo $EXPECTED_VERSION
     update_firmware
 fi
 
 get_halo_ssid
 
 if [ "$SETTINGS_TO_IMPORT" = "export" ]; then
+    echo "Exporting halo config"
     export_halo_config
     exit
 fi
