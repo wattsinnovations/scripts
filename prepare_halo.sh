@@ -128,11 +128,83 @@ reboot_halo () {
     curl -s --cookie <(echo "$COOKIES") -X POST http://$TARGET_IP/api/v1/reboot > /dev/null
 }
 
+reset_factory_settings () {
+    echo "Reset Halo to Factory Settings... (auto reboot afterwards)"
+    curl -s --cookie <(echo "$COOKIES") -X POST http://$TARGET_IP/api/v1/maintenance/factory_reset > /dev/null
+}
+
+set_nics_settings () {
+    ETH1_IP1="20.0.0.2"
+    ETH1_SUBNET1="255.255.255.0"
+    ETH1_IP2="10.223.0.71"
+    ETH1_SUBNET2="255.255.0.0"
+    echo "Setting ETH-1 with the following IP Addresses:
+    ETH-1:
+        Static IP 1: $ETH1_IP1, Subnet: $ETH1_SUBNET1
+        Static IP 2: $ETH1_IP2, Subnet: $ETH1_SUBNET2
+        "
+    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d "\
+    {\"settings\": { \
+        \"static_data\": [ \
+            {\
+                \"gateway_address\": \"0.0.0.0\",\
+                \"ip_address\": \"$ETH1_IP1\",\
+                \"subnet_address\": \"$ETH1_SUBNET1\",\
+                \"dns_address\": \"\",\
+                \"used_for_data\": false\
+            },\
+            {\
+                \"gateway_address\": \"0.0.0.0\",\
+                \"ip_address\": \"$ETH1_IP2\",\
+                \"subnet_address\": \"$ETH1_SUBNET2\",\
+                \"dns_address\": \"\",\
+                \"used_for_data\": false\
+            }\
+        ],\
+        \"dhcp_settings\": null, \
+        \"built_in\": true}}" "http://$TARGET_IP/api/v1/nics/ethernet/eth0/settings")
+    if [ "$result" = "null" ]; then
+        echo "Done."
+    else
+        echo "Failed!!!"
+    fi
+}
+
+import_vpn_profile () {
+    echo "Searching VPN Certificate Folder for Halo: '$SERIAL'..."
+    if ! [ -d "$VPN_CERTS_PATH/$SERIAL" ]; then
+        echo "Fail: Couldn't find certs folder: '$VPN_CERTS_PATH/$SERIAL'"
+        exit 1
+    else
+        echo "Cert Folder Found. Importing to Halo..."
+        CA="$VPN_CERTS_PATH/$SERIAL/ca.crt"
+        CERT="$VPN_CERTS_PATH/$SERIAL/vpn.crt"
+        KEY="$VPN_CERTS_PATH/$SERIAL/vpn.key"
+        success=$(curl -s --cookie <(echo "$COOKIES") -F "body={\
+        \"profile\": \
+            {\"name\": \"L3_VPN_env_ca\", \"mode\": 1, \"auto_activate\": false, \"config_source\": 1, \
+            \"config\": \
+                {\"encryption_type\": 3, \"compression_type\": 3, \"layer_type\": 2} \
+                }};type=application/json" \
+                -F "ca_cert=@$CA;type=application/octet-stream" \
+                -F "cert=@$CERT;type=application/octet-stream" \
+                -F "key=@$KEY;type=application/octet-stream" \
+        http://$TARGET_IP/api/v1/apps/openvpn/profiles)
+    fi
+
+    if ! [ "$success" = "null" ]; then
+        echo "Failed to import VPN profile"
+        exit 1
+    else
+        echo "Import VPN profile success"
+    fi
+}
+
 set_apn () {
     nic_id="$1"
     apn="$2"
     echo -n "  -> Setting $nic_id with $apn... "
-    
+
     result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d '{"dialing_rules": {"dial_type": 1, "username": "", "password": "", "auth_mode": 0, "apn": "$apn", "dial_number": "*99#", "pdp_type": null}}' "http://$TARGET_IP/api/v1/nics/cellular-modem/$nic_id/dialingrules")
     if [ "$result" = "null" ]; then
         echo "Done."
@@ -154,11 +226,11 @@ check_configuration () {
     echo "eth1 IPs:     $ip_addrs"
     echo "WiFi SSID:    $wifi_ssid"
     echo "------------------------------"
-    
+
     num_verizon=0
     num_att=0
     num_tmo=0
-    
+
     while read -r data; do
 
         nic_id=$(echo $data | awk '{print $1}')
@@ -188,7 +260,7 @@ check_configuration () {
         echo "  IMEI        $imei"
         echo "------------------------------"
         done <<<$(echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier')
-    
+
     # We expect 2 Verizon and 2 T-Mobile sims
     if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
         echo "SIM combination: PASS"
@@ -200,12 +272,12 @@ check_configuration () {
 
 #__________________ Main _________________ #
 if ! [ $2 ]; then
-    echo "Usage: prepare_halo.sh <firmware-file> <config-file>"
+    echo "Usage: prepare_halo.sh <firmware-file> <vpn_certs_path>"
     exit 1
 fi
 
 FIRMWARE_FILE_PATH="$1"
-SETTINGS_TO_IMPORT="$2"
+VPN_CERTS_PATH="$2"
 
 wait_for_halo
 
@@ -226,23 +298,16 @@ else
     update_firmware
 fi
 
-get_halo_ssid
 
-if [ "$SETTINGS_TO_IMPORT" = "export" ]; then
-    echo "Exporting halo config"
-    export_halo_config
-    exit
-fi
-
-import_halo_configuration
-
-reboot_halo
+reset_factory_settings
 
 sleep 30
 
 wait_for_halo
 
-set_halo_ssid
+set_nics_settings
+
+import_vpn_profile
 
 check_configuration
 
