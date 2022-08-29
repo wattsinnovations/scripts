@@ -143,25 +143,25 @@ set_nics_settings () {
         Static IP 1: $ETH1_IP1, Subnet: $ETH1_SUBNET1
         Static IP 2: $ETH1_IP2, Subnet: $ETH1_SUBNET2
         "
-    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d "\
-    {\"settings\": { \
-        \"static_data\": [ \
-            {\
-                \"gateway_address\": \"0.0.0.0\",\
-                \"ip_address\": \"$ETH1_IP1\",\
-                \"subnet_address\": \"$ETH1_SUBNET1\",\
-                \"dns_address\": \"\",\
-                \"used_for_data\": false\
-            },\
-            {\
-                \"gateway_address\": \"0.0.0.0\",\
-                \"ip_address\": \"$ETH1_IP2\",\
-                \"subnet_address\": \"$ETH1_SUBNET2\",\
-                \"dns_address\": \"\",\
-                \"used_for_data\": false\
-            }\
-        ],\
-        \"dhcp_settings\": null, \
+    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d "
+    {\"settings\": {
+        \"static_data\": [
+            {
+                \"gateway_address\": \"0.0.0.0\",
+                \"ip_address\": \"$ETH1_IP1\",
+                \"subnet_address\": \"$ETH1_SUBNET1\",
+                \"dns_address\": \"\",
+                \"used_for_data\": false
+            },
+            {
+                \"gateway_address\": \"0.0.0.0\",
+                \"ip_address\": \"$ETH1_IP2\",
+                \"subnet_address\": \"$ETH1_SUBNET2\",
+                \"dns_address\": \"\",
+                \"used_for_data\": false
+            }
+        ],
+        \"dhcp_settings\": null,
         \"built_in\": true}}" "http://$TARGET_IP/api/v1/nics/ethernet/eth0/settings")
     if [ "$result" = "null" ]; then
         echo "Done."
@@ -180,11 +180,11 @@ import_vpn_profile () {
         CA="$VPN_CERTS_PATH/$SERIAL/ca.crt"
         CERT="$VPN_CERTS_PATH/$SERIAL/vpn.crt"
         KEY="$VPN_CERTS_PATH/$SERIAL/vpn.key"
-        success=$(curl -s --cookie <(echo "$COOKIES") -F "body={\
-        \"profile\": \
-            {\"name\": \"L3_VPN_env_ca\", \"mode\": 1, \"auto_activate\": false, \"config_source\": 1, \
-            \"config\": \
-                {\"encryption_type\": 3, \"compression_type\": 3, \"layer_type\": 2} \
+        success=$(curl -s --cookie <(echo "$COOKIES") -F "body={
+        \"profile\":
+            {\"name\": \"L3_VPN_env_ca\", \"mode\": 1, \"auto_activate\": false, \"config_source\": 1,
+            \"config\":
+                {\"encryption_type\": 3, \"compression_type\": 3, \"layer_type\": 2}
                 }};type=application/json" \
                 -F "ca_cert=@$CA;type=application/octet-stream" \
                 -F "cert=@$CERT;type=application/octet-stream" \
@@ -210,6 +210,66 @@ set_apn () {
         echo "Done."
     else
         echo "Failed!!!"
+    fi
+}
+
+set_uas_id () {
+    echo "Enter UAS ID (e.g. PRISMSKY25): "
+    read uas_id
+
+    echo "Setting UAS ID: $uas_id..."
+
+    result=$(curl -s --cookie <(echo "$COOKIES") -X POST -H "Content-Type: application/json" -d "
+    {\"is_enabled\": true, \"settings\": {
+            \"is_ble_enabled\": false,
+            \"is_utm_enabled\": false,
+            \"utm_url\": null,
+            \"basic_id\": \"$uas_id\",
+            \"id_type\": 3,
+            \"ua_type\": 2,
+            \"self_id\": \"$uas_id\",
+            \"operator_id\": \"\"
+        }
+    }" "http://$TARGET_IP/api/v1/advanced/remote_id")
+    if [ "$result" = "null" ]; then
+        echo "UAS ID set successfully"
+    else
+        echo "warning: setting UAS ID failed, but can continue without it."
+    fi
+}
+
+set_users () {
+  source $NEW_USERS_SETTINGS
+  # NEW_ADMIN_USERNAME, NEW_ADMIN_PWD, NEW_BASIC_USERNAME, NEW_BASIC_PWD
+  echo "Adding user: '$NEW_BASIC_USERNAME'..."
+  result=$(curl -s --cookie <(echo "$COOKIES") -X POST -H "Content-Type: application/json" -d "
+    {\"user\": {
+            \"name\": \"$NEW_BASIC_USERNAME\",
+            \"password\": \"$NEW_BASIC_PWD\",
+            \"permission_level\": 20,
+            \"device_admin\": false
+        }
+    }" "http://$TARGET_IP/api/v1/users")
+    if [ "$result" = "null" ]; then
+        echo "Done."
+    else
+        echo "Failed to add user."
+    fi
+
+    echo "Changing admin user..."
+    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d "
+    {\"user\": {
+            \"name\": \"$NEW_ADMIN_USERNAME\",
+            \"is_utm_enabled\": false,
+            \"password\": \"$NEW_ADMIN_PWD\",
+            \"permission_level\": 24,
+            \"device_admin\": true
+        }
+    }" "http://$TARGET_IP/api/v1/users/admin")
+    if [ "$result" = "null" ]; then
+        echo "Done."
+    else
+        echo "Failed to change admin."
     fi
 }
 
@@ -271,13 +331,29 @@ check_configuration () {
 }
 
 #__________________ Main _________________ #
-if ! [ $2 ]; then
-    echo "Usage: prepare_halo.sh <firmware-file> <vpn_certs_path>"
+if ! [ $3 ]; then
+    echo "Usage: prepare_halo.sh <firmware-file> <vpn_certs_path> <new_users_vars>"
     exit 1
 fi
 
 FIRMWARE_FILE_PATH="$1"
 VPN_CERTS_PATH="$2"
+NEW_USERS_SETTINGS="$3"
+
+if ! [ -d "$VPN_CERTS_PATH" ]; then
+  echo "can't find VPN certs folder"
+  exit 1
+fi
+
+if ! [ -f "$NEW_USERS_SETTINGS" ]; then
+  echo "can't find users settings vars file. the expected format is:
+NEW_ADMIN_USERNAME=\"<username>\"
+NEW_ADMIN_PWD=\"<password>\"
+NEW_BASIC_USERNAME=\"<username>\"
+NEW_BASIC_PWD=\"<password>\"
+"
+  exit 1
+fi
 
 wait_for_halo
 
@@ -309,6 +385,10 @@ set_nics_settings
 
 import_vpn_profile
 
+set_uas_id
+
 check_configuration
+
+set_users
 
 echo "Halo $SERIAL was prepared and tested successfully"
