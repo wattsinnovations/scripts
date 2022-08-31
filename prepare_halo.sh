@@ -157,7 +157,9 @@ set_apn () {
     apn="$2"
     echo -n "  -> Setting $nic_id with $apn... "
 
-    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" -d '{"dialing_rules": {"dial_type": 1, "username": "", "password": "", "auth_mode": 0, "apn": "$apn", "dial_number": "*99#", "pdp_type": null}}' "http://$TARGET_IP/api/v1/nics/cellular-modem/$nic_id/dialingrules")
+    result=$(curl -s --cookie <(echo "$COOKIES") -X PUT -H "Content-Type: application/json" \
+            -d "{\"dialing_rules\": {\"dial_type\": 1, \"username\": \"\", \"password\": \"\", \"auth_mode\": 0, \"apn\": \"$apn\", \"dial_number\": \"*99#\", \"pdp_type\": null}}" "http://$TARGET_IP/api/v1/nics/cellular-modem/$nic_id/dialingrules")
+    echo $result
     if [ "$result" = "null" ]; then
         echo "APN set."
     else
