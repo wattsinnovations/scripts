@@ -272,7 +272,8 @@ check_configuration () {
         done <<<$(echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier')
 
     # We expect 2 Verizon and 2 T-Mobile sims
-    if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
+    # if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
+    if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "1" ] && [ "$num_att" = "1" ]; then
         echo "SIM combination: PASS"
     else
         echo "${RedText}SIM combination: FAILED"
