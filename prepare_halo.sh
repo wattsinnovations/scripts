@@ -1,5 +1,7 @@
 #!/bin/bash
 
+LOGIN_USERNAME="admin"
+LOGIN_PASSWORD="admin"
 UAS_ID=""
 TARGET_IP="20.0.0.2"
 COOKIES=""
@@ -29,7 +31,7 @@ wait_for_halo () {
 
 login () {
     COOKIES=$(curl -s -c - --connect-timeout 3 -X POST -H "Content-Type: application/json" \
-        -d '{"username": "admin", "password": "admin"}' \
+        -d "{\"username\": \"$LOGIN_USERNAME\", \"password\": \"$LOGIN_PASSWORD\"}" \
         http://$TARGET_IP/api/v1/login)
     return $?
 }
@@ -258,7 +260,7 @@ check_configuration () {
             if [ "$carrier" = "Verizon" ]; then
                 set_apn "$nic_id" "TELIT.VZWENTP"
                 num_verizon=$((num_verizon+1))
-            elif [ "$carrier" = "at&t" ]; then
+            elif [ "$carrier" = "AT&T" ]; then
                 set_apn "$nic_id" "30304.mcs"
                 num_att=$((num_att+1))
             elif [ "$carrier" = "T-Mobile" ]; then
@@ -273,8 +275,7 @@ check_configuration () {
         echo "------------------------------"
         done <<<$(echo "$nics_status" | jq -r '.nics.cellular_modem[] | .nic_id + " " + .usb_slot + " " + .imei + " " + .iccid + " " + .carrier')
 
-    # We expect 2 Verizon and 2 T-Mobile sims
-    # if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "2" ]; then
+    # We expect 1 Verizon, 1 AT&T, and 2 T-Mobile sims
     if [ "$num_tmo" = "2" ] && [ "$num_verizon" = "1" ] && [ "$num_att" = "1" ]; then
         echo "SIM combination: PASS"
     else

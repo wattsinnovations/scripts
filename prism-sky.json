@@ -1,0 +1,77 @@
+{
+    "serial": "6069",
+    "assets:": [
+        {
+            "name": "skynode",
+            "properties": {
+                "serial": "0123456789",
+                "wifi": {
+                    "ssid": "PRISM-Sky_test",
+                    "password": "auterion"
+                },
+                "sim_imei": "9876543210",
+                "aos_version": "2.5.4",
+                "watts_version": "1.2",
+                "arm_serials": {
+                    "fr": "1",
+                    "br": "2",
+                    "bl": "3",
+                    "fl": "4"
+                }
+            }
+        },
+        {
+            "name": "ainode",
+            "properties": {
+                "serial": "0123456789",
+                "ip_addr": "10.223.0.70",
+                "aos_version": "2.5.4",
+                "watts_version": "1.2"
+            }
+        },
+        {
+            "name": "halo",
+            "properties": {
+                "serial": "0123456789",
+                "ip_addrs": [
+                    "20.0.0.2",
+                    "10.223.0.71"
+                ],
+                "sim_cards": [
+                    {
+                        "carrier": "verizon",
+                        "imei": "1234"
+                    },
+                    {
+                        "carrier": "t-mobile",
+                        "imei": "1234"
+                    },
+                    {
+                        "carrier": "verizon",
+                        "imei": "1234"
+                    },
+                    {
+                        "carrier": "t-mobile",
+                        "imei": "1234"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "doodle",
+            "properties": {
+                "location": "air/ground",
+                "serial": "0123456789",
+                "ip_addr": "10.223.69.69",
+                "fw_version": "2.05"
+            }
+        },
+        {
+            "name": "drs_parachute",
+            "properties": {
+                "serial": "0123456789",
+                "fw_version": "1.0"
+            }
+        }
+    ]
+}
