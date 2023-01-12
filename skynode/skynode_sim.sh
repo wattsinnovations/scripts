@@ -33,7 +33,5 @@ wait_for_connected
 
 SIM_REPORT=$(run_on_target "mmcli -i 0")
 
-# echo $SIM_REPORT
-
 ICCID=$(echo ${SIM_REPORT} | grep -oP "(?<=iccid\:\s)\d*")
 echo "ICCID: $ICCID"

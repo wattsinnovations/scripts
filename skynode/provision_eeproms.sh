@@ -162,7 +162,7 @@ get_target_ip () {
 		echo "Connecting to Raspberry Pi over WiFi"
 		TARGET_IP=$(echo $pingres| sed -nE 's/^PING[^(]+\(([^)]+)\).*/\1/p')
 		TARGET_USER="pi"
-		TARGET_PASSWORD=""
+		TARGET_PASSWORD="dronesarehard123!"
 		return
 	fi
 

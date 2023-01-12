@@ -3,7 +3,7 @@ TARGET_USER="root"
 TARGET_PASSWORD="auterion"
 TARGET_IP="10.41.2.1"
 MY_PATH=$(dirname "$0")
-ARTIFACT_PATH="$MY_PATH/../../ai_developer_tools/output/1.3-ai.auterionos"
+ARTIFACT_PATH="$MY_PATH/../../images/1.3-ai.auterionos"
 SERIAL=""
 SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o LogLevel=ERROR"
 

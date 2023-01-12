@@ -5,7 +5,7 @@ TARGET_USER="root"
 TARGET_PASSWORD="root"
 TARGET_IP=""
 DESIRED_SSID=""
-FIRMWARE_FILE_PATH=""
+FIRMWARE_FILE_PATH="/../../images/"
 BANDWIDTH="15"
 
 # Circumvents host key check, silences warning, connection timeout, silence warnings

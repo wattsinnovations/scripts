@@ -1,12 +1,12 @@
 #!/bin/bash
 TARGET_USER="root"
 TARGET_PASSWORD="auterion"
-TARGET_IP="10.41.1.1"
-MY_IP="10.41.1.2"
-# TARGET_IP="10.223.0.69"
-# MY_IP="10.223.100.50"
+#TARGET_IP="10.41.1.1"
+#MY_IP="10.41.1.2"
+TARGET_IP="10.223.0.69"
+MY_IP="10.223.100.50"
 MY_PATH=$(dirname "$0")
-ARTIFACT_PATH="$MY_PATH/../output/2.5.0-1.0.14.auterionos"
+ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.1.1.auterionos"
 SERIAL=""
 SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o LogLevel=ERROR"
 
