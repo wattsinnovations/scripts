@@ -1,12 +1,12 @@
 #!/bin/bash
 TARGET_USER="root"
 TARGET_PASSWORD="auterion"
-#TARGET_IP="10.41.1.1"
-#MY_IP="10.41.1.2"
-TARGET_IP="10.223.0.69"
-MY_IP="10.223.100.50"
+TARGET_IP="10.41.1.1"
+MY_IP="10.41.1.2"
+#TARGET_IP="10.223.0.69"
+#MY_IP="10.223.100.50"
 MY_PATH=$(dirname "$0")
-ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.1.1.auterionos"
+ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.2.4.auterionos"
 SERIAL=""
 SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o LogLevel=ERROR"
 
@@ -102,10 +102,29 @@ if ! [ $1 ]; then
     exit 1
 fi
 
+scp_override_env () {
+	if ! [ -f ../tools/override.env ]; then
+		echo "${RedText}Failed!" 
+		echo "override.env file missing from the ../tools directory. Add the appropriate file and try again"
+		fail
+	fi
+
+	sshpass -p ${TARGET_PASSWORD} scp $SSH_OPTS ../tools/override.env ${TARGET_USER}@${TARGET_IP}:../data
+
+	output=$(run_on_target "ls ../data/")
+
+	if ! [[ $output == *"override"* ]]; then
+		echo "Failed!"
+		echo "env file is missing on Skynode"
+		fail
+	fi
+
+	echo "Override.env file successfully copied"
+}
+
 install_python_dependencies
 
 wait_for_connected
-
 
 SERIAL=$1
 
@@ -129,6 +148,7 @@ sleep 80
 
 wait_for_connected
 
+scp_override_env
 check_docker_containers
 check_eth0_ip
 set_and_check_wifi_ssid
