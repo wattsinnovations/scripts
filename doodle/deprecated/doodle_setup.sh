@@ -5,7 +5,7 @@ TARGET_USER="root"
 TARGET_PASSWORD="root"
 TARGET_IP=""
 DESIRED_SSID=""
-FIRMWARE_FILE_PATH=""
+FIRMWARE_FILE_PATH="/../../images/"
 BANDWIDTH="15"
 
 # Circumvents host key check, silences warning, connection timeout, silence warnings
@@ -117,25 +117,6 @@ echo "Enter the correct file name from list above or enter absolute path"
 echo "of the .bin firmware file (/home/user/firmware_file.bin). Leave blank to"
 read -p "skip updating firmware. This will be used for the whole batch and can only be set once!: " FIRMWARE_FILE_PATH
 
-#verify user entered valid file name and that file exists
-if ! [ -z "$FIRMWARE_FILE_PATH" ]; then
-    while true; do
-    
-    if test -e "$FIRMWARE_FILE_PATH"; then
-        echo "Firmware found. Using $FIRMWARE_FILE_PATH"
-        break
-    else
-        echo ""
-        echo "WARNING: Firmware file not found!"
-        echo ""
-        read -p "Please enter a valid firmware file: " FIRMWARE_FILE_PATH
-    fi
-    done
-else
-    echo ""
-	echo "Skipping firmware update"	
-	echo ""
-fi
 
 while :
 do
@@ -144,11 +125,12 @@ do
 	if [ "$TARGET_IP" == "q" ]; then
 		echo "Goodbye!"
 		exit
-	fi 
+	fi
 	read -p "Enter desired SSID: " DESIRED_SSID
 
 	wait_for_connected
 
+	#should add an else verification code block here to have user enter correct filename
 	if ! [ -z "$FIRMWARE_FILE_PATH" ]; then
 		update_fw
 		spin[0]="Updating"
@@ -167,8 +149,8 @@ do
 		echo "Update complete!"
 	else
 		echo ""
-#		echo "Skipping firmware update"	
-#		echo ""
+		echo "Skipping firmware update"
+		echo ""
 	fi
 
 	update_settings
@@ -179,4 +161,3 @@ do
 
 	verify_settings
 done
-
