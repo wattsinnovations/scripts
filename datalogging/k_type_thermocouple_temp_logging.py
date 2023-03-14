@@ -5,7 +5,7 @@
 #
 # tested only on windows
 #
-# must first install LabJackPython: https://old3.labjack.com/support/software/examples/ud/labjackpython
+# must pip install LabJackPython first
 #
 # thermocouple used: https://media.digikey.com/pdf/Data%20Sheets/Digilent%20PDFs/240-080_Web.pdf
 #
@@ -21,6 +21,7 @@ import math
 import time
 import csv
 import pathlib
+import argparse
 
 # labjaack specific import for U6 device
 
@@ -28,7 +29,6 @@ import u6
 
 
 # Coefficients used later to convert mV to temp
-# based on cold junction compensation
 
 # -200 C to 0 C
 # -5.891 mV to 0 mV
@@ -149,6 +149,7 @@ tempToVolts1 = (0.0E0,
 # -0.1183432E-3
 # 0.1269686E3
 
+# creates extended list class
 class ExtendedList(list):
     def __init__(self):
         list.__init__(self)
@@ -219,13 +220,19 @@ def hz_to_sec(freq_hz):
 
 # main
 if __name__ == '__main__':
-
+    # configures argparser
+    parser = argparse.ArgumentParser(description='Logs temperature data using a LabJack U6 and K-type Thermocouple connected to AIN0.')
+    parser.add_argument('-f', '--filename', type=str, help='file name to save log')
+    parser.add_argument('-r', '--rate', type=int, help='rate to save data to log in Hz')
+    args = parser.parse_args()
+    
     # configures LabJackU6
     d = u6.U6()
     d.getCalibrationData()
 
     # gets current timestamp used in log file name
-    timestamp = time.strftime("%Y-%m-%d %H.%M.%S", time.localtime())
+    timestamp = time.strftime(
+        "%Y-%m-%d %H.%M.%S", time.localtime())
 
     # prints intro information to console
     print("\n\n\n########################################################")
@@ -233,18 +240,26 @@ if __name__ == '__main__':
     print("and K-Type Thermocouple connected to AIN0")
     print("\n########################################################\n")
 
-    # sets up log file path
-    fileName = input("Enter log file name (automatically saved as .csv): ")
+    # sets up log file path if not declared by user
+    if args.filename:
+        fileName = args.filename
+    else:
+        fileName = input("Enter log file name (automatically saved as .csv): ")
+        
     logPath = str(pathlib.Path(__file__).parent.resolve()) + \
         "\\" + fileName + "-" + timestamp + ".csv"
 
     # sets up logging rate
-    while True:
-        try:
-            loggingRateHz = int(input("Enter desired logging rate in Hz: "))
-            break
-        except ValueError:
-            print("Invalid value.\n")
+    if args.rate:
+        loggingRateHz = args.rate
+   
+    else:
+        while True:
+            try:
+                loggingRateHz = int(input("Enter desired logging rate in Hz: "))
+                break
+            except ValueError:
+                print("Invalid value.\n")
 
     # displays user chosen test parameters
     print("\nSaving data at " + str(loggingRateHz) + "Hz")
