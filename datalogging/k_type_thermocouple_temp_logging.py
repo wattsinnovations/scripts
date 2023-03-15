@@ -16,7 +16,7 @@
 #
 # https://srdata.nist.gov/its90/type_k/kcoefficients.html
 #
-# Watts Innovations - Chris Baquol 3.8.2023
+# Watts Innovations - Chris Baquol + Shacub 3.8.2023
 #
 ###############################################
 
@@ -26,9 +26,68 @@ import csv
 import pathlib
 import argparse
 
+# matplot imports
+import matplotlib.pyplot as plt
+import numpy as np
+import datetime as dt
+from matplotlib.animation import FuncAnimation
+
 # labjack U6
 import u6
 from thermocouples_reference import thermocouples
+# sets up labjack
+labjack = u6.U6()
+labjack.getCalibrationData()
+typeK = thermocouples['K']
+
+# gets the temp
+def getTemp():
+    # Reads cold junction temperature in Kelvin
+    coldJunctTempC = labjack.getTemperature() + 2.5 - 273.15
+
+    # Reads analog voltage from thermocouple
+    thermoCoupleMillvolt = labjack.getAIN(0, resolutionIndex=8, gainIndex=3) * 1000
+    
+    # Use measured millivolts and cold junction temperature to caclulate thermocouple temperature
+    tempC = typeK.inverse_CmV(thermoCoupleMillvolt, Tref=coldJunctTempC)
+    return tempC
+
+# reads your wrist watch
+def getTime():
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    return timestamp
+
+################################################################################################################
+##
+## matplotlib stuff
+##
+# Set up the plot
+fig, ax = plt.subplots()
+x_data, y_data = [], []
+ln, = plt.plot([], [], 'ro')
+
+def init():
+    ax.set_xlim(dt.datetime.now(), dt.datetime.now() + dt.timedelta(seconds=10))
+    ax.set_ylim(0, 100)
+    return ln,
+
+def update(frame):
+    x_data.append(getTime())
+    y_data.append(getTemp())
+    ln.set_data(x_data, y_data)
+
+    window_size = dt.timedelta(seconds=10)
+ 
+  #  print("X:" + str(x_data[-1]) + "\t\tY: "+ str(y_data[-1])) 
+    ax.set_xlim(dt.datetime.now() - window_size, dt.datetime.now() + dt.timedelta(seconds=1))
+
+    # for some reason it needs this otherwise it doesnt show datapoints on graph
+    plt.pause(.01)
+   
+    return ln,
+##
+##
+###############################################################################################################
 
 
 if __name__ == '__main__':
@@ -43,8 +102,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rate', type=int, default=10, help='rate to save data to log in Hz')
     args = parser.parse_args()
     
-    labjack = u6.U6()
-    labjack.getCalibrationData()
+    
 
     if args.filename:
         fileName = args.filename
@@ -58,6 +116,21 @@ if __name__ == '__main__':
    
     print("\nSaving data at " + str(loggingRateHz) + "Hz")
     print("\nLog file: " + logPath)
+    
+    
+##############################################################################################    
+## this section shows the plot
+## it seems like if the plot opens, the script never makes it to the point where it saves data to the log
+## commenting out and not showing plot will save data to log normally
+##
+## maybe need to get even more complex to do both at once
+## this is getting out of hand !!!!! LOLOLOLOLOL
+##
+    ani = FuncAnimation(fig, update, init_func=init, blit=True, interval=(1/loggingRateHz), cache_frame_data=False)
+##           
+    plt.show()
+##
+##############################################################################################    
 
     with open(logPath, mode='w', newline='') as logFile:
 
@@ -68,22 +141,33 @@ if __name__ == '__main__':
 
         print("\n\nTime\t\t\t\tTemperature(C)")
 
-        typeK = thermocouples['K']
+        
+        try:
+            
+            
+            while True:
+  
+                ## moved stuff below into functions, leaving here for now also
+                ##
+                ###timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
-        while True:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                # Reads cold junction temperature in Kelvin
+                ###coldJunctTempC = labjack.getTemperature() + 2.5 - 273.15
 
-            # Reads cold junction temperature in Kelvin
-            coldJunctTempC = labjack.getTemperature() + 2.5 - 273.15
+                # Reads analog voltage from thermocouple
+                ###thermoCoupleMillvolt = labjack.getAIN(0, resolutionIndex=8, gainIndex=3) * 1000
+               
+                # Use measured millivolts and cold junction temperature to caclulate thermocouple temperature
+                ###tempC = typeK.inverse_CmV(thermoCoupleMillvolt, Tref=coldJunctTempC)
+                                
+                time_now = getTime()
+                tempC = getTemp()
 
-            # Reads analog voltage from thermocouple
-            thermoCoupleMillvolt = labjack.getAIN(0, resolutionIndex=8, gainIndex=3) * 1000
+                print(time_now + "\t\t" + "%.2f" % tempC + " Deg (C)")
 
-            # Use measured millivolts and cold junction temperature to caclulate thermocouple temperature
-            tempC = typeK.inverse_CmV(thermoCoupleMillvolt, Tref=coldJunctTempC)
+                logWriter.writerow([timestamp, tempC])
 
-            print(timestamp + "\t\t" + "%.2f" % tempC + " Deg (C)")
+                time.sleep(1/loggingRateHz)
 
-            logWriter.writerow([timestamp, tempC])
-
-            time.sleep(1/loggingRateHz)
+        except KeyboardInterrupt:
+            print("\n\nLogging stopped.....\n\n")
