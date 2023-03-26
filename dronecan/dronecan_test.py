@@ -16,36 +16,45 @@ firmware_dir = '/home/jake/code/wi/px4_watts_private/build/watts_can-bms_default
 firmware_path = ''
 file_path = '/tmp/fw.uavcan.bin'
 
-files = os.listdir(firmware_dir)
-for file in files:
-    if file.endswith('.uavcan.bin'):
-        firmware_path = firmware_dir + file;
-        firmware_path = os.path.normcase(os.path.abspath(firmware_path))
-        print(firmware_path)
-
-# We need to symlink the file to /tmp/fw.uavcan.bin because of 40 character name limit
-if os.path.islink(file_path):
-    os.unlink(file_path)
-os.symlink(firmware_path, file_path)
-
-try:
-    with open(file_path, 'rb') as f:
-        f.read(100)
-except Exception as ex:
-    sys.exit(1)
+if os.path.exists(firmware_dir):
+    files = os.listdir(firmware_dir)
+    for file in files:
+        if file.endswith('.uavcan.bin'):
+            firmware_path = firmware_dir + file;
+            firmware_path = os.path.normcase(os.path.abspath(firmware_path))
+            print('Firmware file path: ', firmware_path)
 
 parser = ArgumentParser(description='dump all DroneCAN messages')
 parser.add_argument("--bitrate", default=1000000, type=int, help="CAN bit rate")
 parser.add_argument("--node-id", default=100, type=int, help="CAN node ID")
 parser.add_argument("--dna-server", action='store_true', default=True, help="run DNA server")
 parser.add_argument("--port", default='/dev/ttyACM0', type=str, help="serial port")
-parser.add_argument("--app-firmware", default=file_path, type=str, help="serial port")
+parser.add_argument("--app-firmware", default=firmware_path, type=str, help="serial port")
 
 args = parser.parse_args()
 
+firmware_path = args.app_firmware
 
-# Set up this node as dna_server
+if not os.path.exists(firmware_path):
+    print('Please provide a firmware file path\n\t--app-firmware <path>')
+    print(firmware_path)
+    sys.exit(1)
+
+# We need to symlink the firmware file path because of 40 character limit
+if os.path.islink(file_path):
+    os.unlink(file_path)
+os.symlink(firmware_path, file_path)
+
+# Ensure it is readable
+try:
+    with open(file_path, 'rb') as f:
+        f.read(100)
+except Exception as ex:
+    sys.exit(1)
+
+# Create the CAN Node
 global node
+print('Starting server as Node ID', args.node_id)
 node = dronecan.make_node(args.port, node_id=args.node_id, bitrate=args.bitrate)
 
 node_monitor = dronecan.app.node_monitor.NodeMonitor(node)
@@ -55,21 +64,15 @@ if args.dna_server:
 
 
 # Waiting for at least one other node to appear online
+print('Waiting for node to come online')
 while len(node_monitor.get_all_node_id()) < 1:
-    print('Waiting for other nodes to become online...' + str(len(node_monitor.get_all_node_id())))
     node.spin(timeout=1)
 
 target_node_id = int(list(node_monitor.get_all_node_id())[0])
 print("Discovered node: " + str(target_node_id))
 
-
-# Set up the file server for firmware udpdate
-# file_path = base64.b64encode(struct.pack("<I",zlib.crc32(bytearray(args.app_firmware,'utf-8'))))[:7].decode('utf-8')
-# print(file_path)
-
-
+# Set up the file server
 file_server = dronecan.app.file_server.FileServer(node, lookup_paths=file_path)
-
 
 update_started = False
 update_complete = False
@@ -93,7 +96,9 @@ def on_response(e):
     if e is not None:
         print('Firmware update response:', e.response)
         if e.response.error != e.response.ERROR_IN_PROGRESS:
-            node.defer(3, request_update)
+            # NOTE: the timing here is fickle, we can't be too early
+            # because we are trying to catch the bootloader
+            node.defer(4, request_update)
 
 
 def request_update():
