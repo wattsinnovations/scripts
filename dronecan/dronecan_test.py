@@ -2,7 +2,6 @@
 
 import dronecan, time, math
 from argparse import ArgumentParser
-import logging
 
 import sys
 import os
@@ -10,22 +9,27 @@ import base64
 import struct
 import zlib
 
-# firmware_dir = '/home/jake/code/wi/px4_watts_private/build/watts_can-bms_default/'
-# firmware_path = ''
+# import logging
+# logging.basicConfig(level=logging.DEBUG)
 
-# files = os.listdir(firmware_dir)
-# for file in files:
-#     if file.endswith('.uavcan.bin'):
-#         firmware_path = firmware_dir + file;
-#         firmware_path = os.path.normcase(os.path.abspath(firmware_path))
-#         print(firmware_path)
+firmware_dir = '/home/jake/code/wi/px4_watts_private/build/watts_can-bms_default/'
+firmware_path = ''
+file_path = '/tmp/fw.uavcan.bin'
 
+files = os.listdir(firmware_dir)
+for file in files:
+    if file.endswith('.uavcan.bin'):
+        firmware_path = firmware_dir + file;
+        firmware_path = os.path.normcase(os.path.abspath(firmware_path))
+        print(firmware_path)
 
-file_path = '/home/jake/fw.uavcan.bin'
-firmware_path = '/home/jake/fw.uavcan.bin'
+# We need to symlink the file to /tmp/fw.uavcan.bin because of 40 character name limit
+if os.path.islink(file_path):
+    os.unlink(file_path)
+os.symlink(firmware_path, file_path)
 
 try:
-    with open(firmware_path, 'rb') as f:
+    with open(file_path, 'rb') as f:
         f.read(100)
 except Exception as ex:
     sys.exit(1)
@@ -35,11 +39,10 @@ parser.add_argument("--bitrate", default=1000000, type=int, help="CAN bit rate")
 parser.add_argument("--node-id", default=100, type=int, help="CAN node ID")
 parser.add_argument("--dna-server", action='store_true', default=True, help="run DNA server")
 parser.add_argument("--port", default='/dev/ttyACM0', type=str, help="serial port")
-parser.add_argument("--app-firmware", default=firmware_path, type=str, help="serial port")
+parser.add_argument("--app-firmware", default=file_path, type=str, help="serial port")
 
 args = parser.parse_args()
 
-# logging.basicConfig(level=logging.DEBUG)
 
 # Set up this node as dna_server
 global node
@@ -65,7 +68,7 @@ print("Discovered node: " + str(target_node_id))
 # print(file_path)
 
 
-file_server = dronecan.app.file_server.FileServer(node, lookup_paths=firmware_path)
+file_server = dronecan.app.file_server.FileServer(node, lookup_paths=file_path)
 
 
 update_started = False
@@ -96,14 +99,12 @@ def on_response(e):
 def request_update():
     global update_started
 
-    print('REQUESTING UPDATE')
-    request = dronecan.uavcan.protocol.file.BeginFirmwareUpdate.Request(
-                source_node_id=node.node_id,
-                image_file_remote_path=dronecan.uavcan.protocol.file.Path(path=file_path))
-
     if not update_started:
+        print('REQUESTING UPDATE')
+        request = dronecan.uavcan.protocol.file.BeginFirmwareUpdate.Request(
+                    source_node_id=node.node_id,
+                    image_file_remote_path=dronecan.uavcan.protocol.file.Path(path=file_path))
         node.request(request, target_node_id, on_response, priority=30)
-
 
 
 node_status_handle = node.add_handler(dronecan.uavcan.protocol.NodeStatus, on_node_status)
