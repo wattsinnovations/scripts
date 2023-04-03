@@ -1,21 +1,47 @@
 #!/bin/bash
 TARGET_USER="root"
 TARGET_PASSWORD="auterion"
-TARGET_IP="10.41.1.1"
-MY_IP="10.41.1.2"
+TARGET_IP=""
+MY_IP=""
 #TARGET_IP="10.223.0.69"
 #MY_IP="10.223.100.50"
 MY_PATH=$(dirname "$0")
-ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.2.4.auterionos"
+ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.2.12.auterionos"
 SERIAL=""
 SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o LogLevel=ERROR"
+MACHINE_TYPE=""
+CONNECTION_TYPE=""
 
 RedText=$'\e[1;31m'
 GreenText=$'\e[1;32m'
 
+set_connection_type () {
+	if [ -z "$CONNECTION_TYPE" ]; then
+		echo "Must specify aircraft connection type"
+		fail
+	fi
+
+	if [ "$CONNECTION_TYPE" == "usb" ]; then
+		TARGET_IP="10.41.1.1"
+		MY_IP="10.41.1.2"
+	fi
+
+	if [ "$CONNECTION_TYPE" == "ip" ]; then
+		TARGET_IP="10.223.0.69"
+		MY_IP="10.223.100.50"
+	fi
+	
+	# error handling for if connection type is not specified by the user
+	if [ "$CONNECTION_TYPE" != "usb" ] && [ "$CONNECTION_TYPE" != "ip" ]; then
+		echo "$CONNECTION_TYPE"
+		echo "Must specify aircraft connection type as either 'ip' or 'usb'"
+		fail
+	fi
+}
+
 wait_for_connected () {
 	until connect ; do
-		echo "Waiting to discover device..."
+		echo "Waiting to discover device connected via ${CONNECTION_TYPE}..."
 		sleep 3
 	done
 }
@@ -102,25 +128,45 @@ if ! [ $1 ]; then
     exit 1
 fi
 
+
+# Check for DU or Stock sky being updated, and copy the appropriate override.env file
 scp_override_env () {
+
+	if [ -z "$MACHINE_TYPE" ]; then
+		echo "Machine type not set: 6030 du or 6503 stock"
+		fail
+	fi
+
 	if ! [ -f ../tools/override.env ]; then
 		echo "${RedText}Failed!" 
 		echo "override.env file missing from the ../tools directory. Add the appropriate file and try again"
 		fail
 	fi
 
-	sshpass -p ${TARGET_PASSWORD} scp $SSH_OPTS ../tools/override.env ${TARGET_USER}@${TARGET_IP}:../data
-
-	output=$(run_on_target "ls ../data/")
-
-	if ! [[ $output == *"override"* ]]; then
-		echo "Failed!"
-		echo "env file is missing on Skynode"
-		fail
+	if [ "$MACHINE_TYPE" == "du" ]; then
+		../halo/install_halo_default_gw_service.sh $CONNECTION_TYPE
 	fi
 
-	echo "Override.env file successfully copied"
+	if [ "$MACHINE_TYPE" == "stock" ]; then
+		sshpass -p ${TARGET_PASSWORD} scp $SSH_OPTS ../tools/override.env ${TARGET_USER}@${TARGET_IP}:../data
+
+		output=$(run_on_target "ls ../data/")
+
+		if ! [[ $output == *"override"* ]]; then
+			echo "Failed!"
+			echo "env file is missing on Skynode"
+			fail
+		fi
+
+		echo "Override.env file successfully copied"
+	fi
 }
+
+MACHINE_TYPE=$2
+
+CONNECTION_TYPE=$3
+
+set_connection_type
 
 install_python_dependencies
 
@@ -144,7 +190,7 @@ sleep 80
 # 	- release version
 
 # - validation
-# 	- software version is correct
+# - software version is correct
 
 wait_for_connected
 
