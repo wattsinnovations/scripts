@@ -20,7 +20,11 @@ Halo setup
 Skynode
 ----------
 
-./skynode_update.sh <VehicleSerialNumber>
+./skynode_update.sh <VehicleSerialNumber> <MachineType> <ConnectionType>
+    Machine Type options: stock, du
+    Connection Type options: usb, ip
+    ---Examples--- 
+    ./skynode_update.sh 6569 stock usb
 
 ./provision_eeproms.sh -i 2 -m 1.1 -p FA28 -t MF -1 $serialnum -2 $serialnum -3 $serialnum -4 $serialnum
 
