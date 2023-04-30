@@ -1,0 +1,6 @@
+LabJackPython
+argparse
+odrive
+pymavlink
+future
+thermocouples_reference
