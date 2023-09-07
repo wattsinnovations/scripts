@@ -3,12 +3,10 @@ TARGET_USER="root"
 TARGET_PASSWORD="auterion"
 TARGET_IP=""
 MY_IP=""
-#TARGET_IP="10.223.0.69"
-#MY_IP="10.223.100.50"
 MY_PATH=$(dirname "$0")
-ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_1.2.12.auterionos"
-SERIAL=""
+ARTIFACT_PATH="$MY_PATH/../../images/com.wattsinnovations.auterion_os_0.1.3.7.auterionos"
 SSH_OPTS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o LogLevel=ERROR"
+SERIAL=""
 MACHINE_TYPE=""
 CONNECTION_TYPE=""
 
@@ -78,21 +76,6 @@ update () {
 	python3 $MY_PATH/../tools/update.py --artifact $ARTIFACT_PATH --device-ip $TARGET_IP
 }
 
-set_and_check_wifi_ssid () {
-	skynode_ssid="PRISM Sky $SERIAL"
-	# TODO: arg for MY_IP
-	python3 $MY_PATH/set_ext_param.py --port $MY_IP:14550 --compid 191 --set WIFI_SSID="$skynode_ssid"
-
-	echo "Waiting to discover skynode WiFi..."
-	wifi_list=""
-	until [[ $wifi_list == *$skynode_ssid* ]]; do
-		wifi_list=$(nmcli dev wifi | grep $SERIAL)
-		sleep 5
-	done
-
-	echo "SSID updated successfully"
-}
-
 run_on_target() {
 	sshpass -p ${TARGET_PASSWORD} ssh $SSH_OPTS ${TARGET_USER}@${TARGET_IP} $1
 }
@@ -121,50 +104,55 @@ fail () {
 	exit 1
 }
 
-#__________________ Main _________________ #
-if ! [ $1 ]; then
-    echo "Usage: skynode_update.sh <serial>"
-    echo "eg: ./skynode_update.sh 6012"
-    exit 1
-fi
-
-
 # Check for DU or Stock sky being updated, and copy the appropriate override.env file
 scp_override_env () {
+	# ANY MACHINE UPDATED WITH THIS SCRIPT IS ASSUMED TO BE A DU MACHINE
 
-	if [ -z "$MACHINE_TYPE" ]; then
-		echo "Machine type not set: 6030 du or 6503 stock"
-		fail
-	fi
-
-	if ! [ -f ../tools/override.env ]; then
+	if ! [ -f ../tools/du_override/override.env ]; then
 		echo "${RedText}Failed!" 
-		echo "override.env file missing from the ../tools directory. Add the appropriate file and try again"
+		echo "override.env file missing from the ../tools/du_override directory. Add the appropriate file and try again"
 		fail
 	fi
 
-	if [ "$MACHINE_TYPE" == "du" ]; then
-		../halo/install_halo_default_gw_service.sh $CONNECTION_TYPE
+	sshpass -p ${TARGET_PASSWORD} scp $SSH_OPTS ../tools/du_override/override.env ${TARGET_USER}@${TARGET_IP}:../data
+
+	output=$(run_on_target "ls ../data/")
+
+	if ! [[ $output == *"override"* ]]; then
+		echo "Failed!"
+		echo "env file is missing on Skynode"
+		fail
 	fi
 
-	if [ "$MACHINE_TYPE" == "stock" ]; then
-		sshpass -p ${TARGET_PASSWORD} scp $SSH_OPTS ../tools/override.env ${TARGET_USER}@${TARGET_IP}:../data
-
-		output=$(run_on_target "ls ../data/")
-
-		if ! [[ $output == *"override"* ]]; then
-			echo "Failed!"
-			echo "env file is missing on Skynode"
-			fail
-		fi
-
-		echo "Override.env file successfully copied"
-	fi
+	echo "Override.env successfully copied"
 }
 
-MACHINE_TYPE=$2
+# disable WiFi
+disable_wifi () {
+	python3 $MY_PATH/set_ext_param.py --port $MY_IP:14550 --compid 191 --set WIFI_MODE=0
 
-CONNECTION_TYPE=$3
+	echo "WiFi disabled successfully"
+}
+
+
+# install Halo default gateway service
+install_halo_default_gw_service () {
+	../halo/install_halo_default_gw_service.sh $CONNECTION_TYPE
+	echo "Default gateway configured for Halo"
+}
+
+welcome_to_watts () {
+	base64 -d <<<"H4sIACmG+GQAA61RwQ0DMQj7Zwq+fbFA5+gLyYswfLHju4vUbyFBxBiHKCuAsIEpaEdUQRt33dgvdUWNy3K8Wp07Jjkd0fZRqB3joErI8ArJZUmMiPoUi/fVo9Z4XdlDbSm6OGoDf2KWRuHtlxrP7ofPufODSsCzvTnbyCFnzcuYFqSGTTNIHePMD6oAsFj3B/zF1heBAEbs0wEAAA==" | gunzip
+	base64 -d <<<"H4sIAAAAAAAAA8WWsW7jMAyG93uKGgQ4diME3CJDCwFOWrnkUfTs/Sk7iZPajpOmd0QRpbbEj/wpURmG45a+2ROLr/bnZdzr1GPMKyKHmcXfr+d5JneiuRYm9X/AvICTlVKJx/qayM8yZ4W9M0mreD4Tkzv5bzA71KsTM488jhgIVhRwFaa1Ja21ZcBpj5mGdcGylmYUzLBxGphFa5VvEWZz7LfYBBbjDnP3QKQq+fRXQC0QV7QQdabkFU+KIjA5bEbuaJusFrW8tjnaIJ8fH5+lhLA+ZKsqFfSh9ZdTyJGa4zFVxay8DH2TifghniC8nG9zjfPiJicvoevYLfIsmCxSq+IglTDFN8WIt7Z0vc3sLmN7TEaTk+6GCzGhporAqFOnD4LSPUiVawsRLPW0ylz2GViKMnBJeX7oMncgiwLCTXOJUxpB4F8iNzhus905vSvQTZ7pXIeoOEK2xdS2mJcV4tF5wwLIY1m+v3F4/6y1NW0vkbVVR9Cd0YGks86yjr4xd8E629M9AYsTlf7Fp16k0xFNt4537AXmoJx7UlaBUuxv5lpH3U7sx8zmLP0g1pFz1Dmh/tlolHxzvb0lz3kFlO1jxr2CLYzjIcHJ6LXtmLj7zJUFUDa1SA5dCCeYYx/Fk2ZcjwC3mHsLnB2fMt0rvc3Hti1YE2V+lhnKPNQmY8/i+tRo3HxpfBQpQt2DzGPTZhsAiw4olnqHst5ixaa3dZS3MiO5aHQVvwu2xBioF7bPtr19e4yocVPaJm2ykzEZTk7cLCX9lNnSA1zrSuj0K+VRbM/Vc8uydN0f0t7J9IO0dzKfs//B/AI8P6lylw0AAA==" | gunzip
+	echo
+	echo "WATTS UPDATER - DU P-SKY"
+}
+
+#__________________ Main _________________ #
+
+CONNECTION_TYPE=$1
+
+welcome_to_watts
 
 set_connection_type
 
@@ -172,15 +160,13 @@ install_python_dependencies
 
 wait_for_connected
 
-SERIAL=$1
-
 update
+
 # We know after updating that Docker is not actually done...
 sleep 80
 
 # Post update steps
 # - register skynode serial number in suite
-
 # - Update database with all relevant information
 # 	- prism sky serial number
 # 	- skynode serial number
@@ -188,7 +174,6 @@ sleep 80
 # 	- wifi ssid/password
 # 	- aos version
 # 	- release version
-
 # - validation
 # - software version is correct
 
@@ -197,7 +182,7 @@ wait_for_connected
 scp_override_env
 check_docker_containers
 check_eth0_ip
-set_and_check_wifi_ssid
+disable_wifi
 
 echo "${GreenText}Success"
 
