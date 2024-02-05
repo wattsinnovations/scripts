@@ -1,0 +1,50 @@
+version: '2.3'
+# Would be nice to use a project name to avoid "orphan warnings", but this seems broken
+# goodhttps://stackoverflow.com/questions/73250201/docker-compose-invalid-top-level-property-name
+#name: asmira
+
+services:
+  asmira:
+    image: asmira:build041123_asmirabuild040923
+    container_name: asmira
+    restart: always
+    tty: true
+    runtime: nvidia
+    privileged: true
+    network_mode: host
+    ipc: host
+    depends_on:
+      - asmira-logger
+    volumes:
+      - /dev:/dev      
+      - /tmp/argus_socket:/tmp/argus_socket
+    env_file:
+      - settings.default.env
+      #- settings.user.env
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  asmira-logger:
+    image: asmira-logger:build041123_asmirabuild040923
+    container_name: asmira-logger
+    restart: always
+    tty: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGLEVEL=INFO # DEBUG|INFO|ERROR (Default: INFO)
+      - SKIP_SENDING=False # True|False (Default: False)
+      - CONTAINER_NAME=asmira # (Default: asmira)
+      - SOURCE_SYSTEM=1 # (Default: 1)
+      - SOURCE_COMPONENT=25 # (Default: 25)
+      - TARGET_SYSTEM=1 # (Default: 1)
+      - TARGET_COMPONENT=1 # (Default: 1)
+
+      # TODO: Variable Skynode IP
+      - CONNECTION=tcp:172.20.50.51:5790 # (Default: tcp:172.20.50.51:5790)
+
+# Name the network to prevent errors when running docker-compose caused by docker using folder name as project name
+networks:
+  default: 
+    name: asmira
